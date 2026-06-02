@@ -1,0 +1,180 @@
+Set frame rate
+
+Set resolution:
+frame_width = 640
+frame_height = 480
+
+Calculate center of camera using resolution:
+cx_C = frame_width / 2
+cy_C = frame_height / 2
+
+Set PID gains:
+Kp_x
+Ki_x
+Kd_x
+
+```
+Kp_y
+Ki_y
+Kd_y
+```
+
+Set PID memory:
+previous_error_x = 0
+previous_error_y = 0
+integral_x = 0
+integral_y = 0
+previous_time = current time
+
+Set deadzone:
+deadzone_x
+deadzone_y
+
+Set motor limits:
+pan_min
+pan_max
+tilt_min
+tilt_max
+
+Set starting motor positions:
+current_motor_position_pan = starting pan position
+current_motor_position_tilt = starting tilt position
+
+Set tracking state:
+selected_track_id = none
+lost_target_count = 0
+
+Open camera
+
+Loop forever:
+
+```
+Get time at the start of the loop:
+    current_time = current time
+    dt = current_time - previous_time
+
+Detect object
+
+Detector gives bbox boxes
+
+If detector finds nothing:
+    Handle no target:
+        hold current motor position
+        do not calculate PID
+        do not keep integrating error
+        optionally reset integral if target has been lost too long
+        selected_track_id may stay the same for a short timeout or be cleared
+    previous_time = current_time
+    go back to start of loop
+
+Bbox boxes go into SORT
+
+SORT outputs tracked bboxes + IDs
+
+If SORT outputs no valid tracks:
+    Handle no target:
+        hold current motor position
+        do not calculate PID
+        do not keep integrating error
+        optionally reset integral if target has been lost too long
+        selected_track_id may stay the same for a short timeout or be cleared
+    previous_time = current_time
+    go back to start of loop
+
+If already tracking an ID:
+    Check whether selected_track_id exists in SORT output
+
+    If selected_track_id exists:
+        Use that ID's bbox
+
+    If selected_track_id disappeared:
+        Try to choose a new valid ID from SORT output
+
+        If no valid ID can be chosen:
+            Handle no target
+            previous_time = current_time
+            go back to start of loop
+
+Else:
+    Choose a valid ID from SORT output:
+        choose closest bbox to camera center
+        or choose largest bbox
+        or choose highest-confidence bbox
+
+    Store chosen ID as selected_track_id
+
+Calculate center of chosen SORT bbox:
+
+    If bbox format is x, y, w, h:
+        cx_S = x + (w / 2)
+        cy_S = y + (h / 2)
+
+    If bbox format is x1, y1, x2, y2:
+        cx_S = (x1 + x2) / 2
+        cy_S = (y1 + y2) / 2
+
+Calculate error between SORT target center and camera center:
+    error_x = cx_C - cx_S
+    error_y = cy_C - cy_S
+
+Apply deadzone to error:
+
+    If absolute value of error_x is less than deadzone_x:
+        error_x = 0
+
+    If absolute value of error_y is less than deadzone_y:
+        error_y = 0
+
+Calculate PID for pan axis:
+
+    proportional_x = Kp_x * error_x
+    integral_x = integral_x + error_x * dt
+    derivative_x = (error_x - previous_error_x) / dt
+
+    PID_output_x = proportional_x + (Ki_x * integral_x) + (Kd_x * derivative_x)
+
+Calculate PID for tilt axis:
+
+    proportional_y = Kp_y * error_y
+    integral_y = integral_y + error_y * dt
+    derivative_y = (error_y - previous_error_y) / dt
+
+    PID_output_y = proportional_y + (Ki_y * integral_y) + (Kd_y * derivative_y)
+
+Set motor corrections:
+
+    correction_pan = PID_output_x
+    correction_tilt = PID_output_y
+
+Calculate new motor positions:
+
+    new_motor_position_pan = current_motor_position_pan + correction_pan
+    new_motor_position_tilt = current_motor_position_tilt + correction_tilt
+
+Clamp new motor positions:
+
+    Clamp new_motor_position_pan between pan_min and pan_max
+    Clamp new_motor_position_tilt between tilt_min and tilt_max
+
+Send commands to motors:
+
+    Send new_motor_position_pan to pan motor
+    Send new_motor_position_tilt to tilt motor
+
+Update stored motor positions:
+
+    current_motor_position_pan = new_motor_position_pan
+    current_motor_position_tilt = new_motor_position_tilt
+
+Update PID memory:
+
+    previous_error_x = error_x
+    previous_error_y = error_y
+    previous_time = current_time
+```
+
+End loop if keyboard interruption
+
+Stop camera
+
+Stop motors or disable torque if needed
