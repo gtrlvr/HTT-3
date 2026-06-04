@@ -44,10 +44,11 @@ Set tracking state:
 selected_track_id = none
 lost_target_count = 0
 
-Open camera
+
 
 Loop forever:
 
+Open camera
 ```
 Get time at the start of the loop:
     current_time = current time

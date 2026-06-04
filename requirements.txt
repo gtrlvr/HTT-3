@@ -1,0 +1,9 @@
+numpy
+scipy
+opencv-python
+ultralytics
+filterpy==1.4.5
+scikit-image
+dynamixel-sdk
+matplotlib
+pandas>=2.2.2
