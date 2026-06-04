@@ -7,3 +7,4 @@ scikit-image
 dynamixel-sdk
 matplotlib
 pandas>=2.2.2
+lap
