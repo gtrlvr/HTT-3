@@ -8,25 +8,14 @@ Calculate center of camera using resolution:
 cx_C = frame_width / 2
 cy_C = frame_height / 2
 
-Set PID gains:
+Set proportional gains (P controller only - I and D not needed):
 Kp_x
-Ki_x
-Kd_x
-
-```
 Kp_y
-Ki_y
-Kd_y
-```
+    NOTE: because control is incremental (position += Kp*error each frame), the accumulation
+    itself acts as an integrator, so plain P already drives steady-state error to zero.
+    No I term, no D term, no dt/timing, no error memory needed.
 
-Set PID memory:
-previous_error_x = 0
-previous_error_y = 0
-integral_x = 0
-integral_y = 0
-previous_time = current time
-
-Set deadzone:
+Set deadzone (the "stop" threshold; 0 = disabled):
 deadzone_x
 deadzone_y
 
@@ -48,7 +37,7 @@ Set speed control (button-adjustable):
     moving_speed = 1023        # register pinned high so the motor can execute each step
     speed_scale = 1.0          # the real knob: multiplies correction = jump-per-frame
     speed_step = 0.25          # a/d nudge amount
-    correction = PID_output * speed_scale   # <-- this is what makes speed actually change
+    correction = Kp * error * speed_scale   # <-- this is what makes speed actually change
 
     A = speed up   -> speed_scale + speed_step
     D = slow down  -> speed_scale - speed_step
@@ -68,10 +57,6 @@ Loop forever:
 
 Open camera
 ```
-Get time at the start of the loop:
-    current_time = current time
-    dt = current_time - previous_time
-
 Detect object
 
 Detector gives bbox boxes
@@ -79,11 +64,8 @@ Detector gives bbox boxes
 If detector finds nothing:
     Handle no target:
         hold current motor position
-        do not calculate PID
-        do not keep integrating error
-        optionally reset integral if target has been lost too long
+        do not calculate a correction
         selected_track_id may stay the same for a short timeout or be cleared
-    previous_time = current_time
     go back to start of loop
 
 Bbox boxes go into SORT
@@ -93,11 +75,8 @@ SORT outputs tracked bboxes + IDs
 If SORT outputs no valid tracks:
     Handle no target:
         hold current motor position
-        do not calculate PID
-        do not keep integrating error
-        optionally reset integral if target has been lost too long
+        do not calculate a correction
         selected_track_id may stay the same for a short timeout or be cleared
-    previous_time = current_time
     go back to start of loop
 
 If already tracking an ID:
@@ -111,7 +90,6 @@ If already tracking an ID:
 
         If no valid ID can be chosen:
             Handle no target
-            previous_time = current_time
             go back to start of loop
 
 Else:
@@ -156,26 +134,10 @@ Apply deadzone to error:
     If absolute value of error_y is less than deadzone_y:
         error_y = 0
 
-Calculate PID for pan axis:
+Proportional control (P only), scaled by the live speed knob:
 
-    proportional_x = Kp_x * error_x
-    integral_x = integral_x + error_x * dt
-    derivative_x = (error_x - previous_error_x) / dt
-
-    PID_output_x = proportional_x + (Ki_x * integral_x) + (Kd_x * derivative_x)
-
-Calculate PID for tilt axis:
-
-    proportional_y = Kp_y * error_y
-    integral_y = integral_y + error_y * dt
-    derivative_y = (error_y - previous_error_y) / dt
-
-    PID_output_y = proportional_y + (Ki_y * integral_y) + (Kd_y * derivative_y)
-
-Set motor corrections:
-
-    correction_pan = PID_output_x
-    correction_tilt = PID_output_y
+    correction_pan  = Kp_x * error_x * speed_scale
+    correction_tilt = Kp_y * error_y * speed_scale
 
 Calculate new motor positions:
 
@@ -196,12 +158,6 @@ Update stored motor positions:
 
     current_motor_position_pan = new_motor_position_pan
     current_motor_position_tilt = new_motor_position_tilt
-
-Update PID memory:
-
-    previous_error_x = error_x
-    previous_error_y = error_y
-    previous_time = current_time
 
 Handle keyboard input each frame (OpenCV window focused):
     read key

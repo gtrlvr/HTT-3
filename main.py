@@ -186,23 +186,12 @@ cap.set(cv2.CAP_PROP_FPS, 30)
 cx_C = frame_width / 2
 cy_C = frame_height / 2
 
-#Set PID gains pan
+#Proportional gains (P controller)
 Kp_x = 0.1
-Ki_x = 0
-Kd_x = 0
-
-#Set PID gains tilt
 Kp_y = 0.1
-Ki_y = 0
-Kd_y = 0
 
-#Set PID memory
-previous_error_x = 0
-previous_error_y = 0
-integral_x = 0
-integral_y = 0
-
-#Set deadzone
+#Deadzone (px): once the target is within this many pixels of center, stop correcting so
+#the turret settles instead of jittering. This is the "stop" threshold. 0 = disabled.
 deadzone_x = 0
 deadzone_y = 0
 
@@ -225,9 +214,6 @@ if current_motor_position_pan is None:
 if current_motor_position_tilt is None:
     current_motor_position_tilt = (tilt_min + tilt_max) // 2
 
-# PID control loop timing
-previous_time = time.time()
-
 model = YOLO("yolov8n.pt")   # standard person detection; BoT-SORT handles IDs
 
 # Start terminal listener so the track ID can be changed live
@@ -237,10 +223,6 @@ print("Type a new track ID + Enter at any time to switch targets.")
 
 try:
     while True:
-
-        current_time = time.time()
-        dt = current_time - previous_time
-        previous_time = current_time
 
         ret, frame = cap.read()
         if not ret:
@@ -289,21 +271,9 @@ try:
         if abs(error_y) < deadzone_y:
             error_y = 0
 
-        #calculate PID for pan axis:
-        proportional_x = Kp_x * error_x
-        integral_x += Ki_x * error_x * dt
-        derivative_x = Kd_x * (error_x - previous_error_x) / dt
-        PID_output_x = proportional_x + integral_x + derivative_x
-
-        #calculate PID for tilt axis:
-        proportional_y = Kp_y * error_y
-        integral_y += Ki_y * error_y * dt
-        derivative_y = Kd_y * (error_y - previous_error_y) / dt
-        PID_output_y = proportional_y + integral_y + derivative_y
-
-        #set motor corrections (SPEED_SCALE = the speed knob: bigger jump per frame = faster)
-        correction_pan = PID_output_x * SPEED_SCALE
-        correction_tilt = PID_output_y * SPEED_SCALE
+        #proportional control: correction proportional to error, scaled by the speed knob
+        correction_pan = Kp_x * error_x * SPEED_SCALE
+        correction_tilt = Kp_y * error_y * SPEED_SCALE
 
         #Calculate new motor positions (position is tracked in software, no reads)
         new_motor_position_pan = current_motor_position_pan + correction_pan
@@ -320,11 +290,6 @@ try:
         #Update stored motor positions
         current_motor_position_pan = new_motor_position_pan
         current_motor_position_tilt = new_motor_position_tilt
-
-        #Update PID memory
-        previous_error_x = error_x
-        previous_error_y = error_y
-        previous_time = current_time
 
         annoted_frame = results[0].plot()
         cv2.imshow("human tracking turret version 3", annoted_frame)
