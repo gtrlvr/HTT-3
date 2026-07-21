@@ -40,6 +40,24 @@ Set starting motor positions:
 current_motor_position_pan = starting pan position
 current_motor_position_tilt = starting tilt position
 
+Set speed control (button-adjustable):
+    NOTE: the Moving Speed register alone does NOT visibly change tracking speed, because
+    the per-frame position jump (Kp*error) is the bottleneck, not the motor's slew rate.
+    So: pin the register HIGH once, and make the speed knob a MULTIPLIER on the correction.
+
+    moving_speed = 1023        # register pinned high so the motor can execute each step
+    speed_scale = 1.0          # the real knob: multiplies correction = jump-per-frame
+    speed_step = 0.25          # a/d nudge amount
+    correction = PID_output * speed_scale   # <-- this is what makes speed actually change
+
+    A = speed up   -> speed_scale + speed_step
+    D = slow down  -> speed_scale - speed_step
+    1 = low    (0.5x)
+    2 = medium (1.0x)
+    3 = high   (2.0x)
+    4 = super  (3.5x)
+    q = quit
+
 Set tracking state:
 selected_track_id = none
 lost_target_count = 0
@@ -114,6 +132,18 @@ Calculate center of chosen SORT bbox:
         cx_S = (x1 + x2) / 2
         cy_S = (y1 + y2) / 2
 
+BODY TRACKING (original setup):
+    Standard person model (yolov8n.pt), track the whole-body box center.
+    BoT-SORT (default) assigns the IDs.
+        cx_S = (x1 + x2) / 2
+        cy_S = (y1 + y2) / 2
+
+ID PERSISTENCE (the one change on top of default BoT-SORT):
+    Use a custom BoT-SORT config (botsort_reid.yaml):
+        track_buffer raised 30 -> 150   (keep lost tracks ~5s instead of ~1s)
+        with_reid: True                 (re-match a reappearing person by appearance)
+    Result: a person who vanishes for a second keeps their original ID.
+
 Calculate error between SORT target center and camera center:
     error_x = cx_C - cx_S
     error_y = cy_C - cy_S
@@ -172,6 +202,19 @@ Update PID memory:
     previous_error_x = error_x
     previous_error_y = error_y
     previous_time = current_time
+
+Handle keyboard input each frame (OpenCV window focused):
+    read key
+    if key == 'a':   # speed UP
+        default_speed = clamp(default_speed + speed_increment, speed_min, speed_max)
+        write default_speed to pan and tilt motors
+        print new speed
+    if key == 'd':   # slow DOWN
+        default_speed = clamp(default_speed - speed_increment, speed_min, speed_max)
+        write default_speed to pan and tilt motors
+        print new speed
+    if key == 'q':   # quit
+        break
 ```
 
 End loop if keyboard interruption
