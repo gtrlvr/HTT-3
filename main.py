@@ -12,7 +12,7 @@ BAUDRATE = 57600
 CAMERA_INDEX = 1
 
 PAN_MOTOR_ID = 1
-# TILT_MOTOR_ID = 2
+TILT_MOTOR_ID = 2
 
 ADDR_MX_TORQUE_ENABLE = 24
 ADDR_MX_GOAL_POSITION = 30
@@ -132,7 +132,7 @@ tilt_max = 0
 
 #Set starting motor position
 current_motor_position_pan = get_dynamixel_position(PAN_MOTOR_ID)
-# current_motor_position_tilt = get_dynamixel_position(TILT_MOTOR_ID)
+current_motor_position_tilt = get_dynamixel_position(TILT_MOTOR_ID)
 
 #Set tracking state:
 # selected_track_id = none
