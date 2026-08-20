@@ -9,9 +9,12 @@ from ultralytics.utils import ROOT, YAML
 
 CAMERA_INDEX = 0
 
+# Ignore small frame-to-frame center changes caused by bounding-box jitter.
+IDLE_MOVEMENT_THRESHOLD_PX = 20.0
+
 # Only objects moving within this range can become the active target.
 # Adjust these values after observing the measured speeds for your camera.
-MIN_TRACKING_SPEED_PX_S = 20.0
+MIN_TRACKING_SPEED_PX_S = 35.0
 MAX_TRACKING_SPEED_PX_S = 1000.0
 
 # Forget old positions after an ID has been missing for this long.
@@ -125,7 +128,12 @@ try:
                     if dt > 0:
                         dx = cx - previous_cx
                         dy = cy - previous_cy
-                        speed = float(np.hypot(dx, dy) / dt)
+                        movement_px = float(np.hypot(dx, dy))
+
+                        if movement_px < IDLE_MOVEMENT_THRESHOLD_PX:
+                            speed = 0.0
+                        else:
+                            speed = movement_px / dt
 
                 previous_positions[track_id] = (cx, cy, frame_time)
 
@@ -193,6 +201,9 @@ try:
             elif speed > MAX_TRACKING_SPEED_PX_S:
                 box_color = (0, 0, 255)
                 speed_status = f"{speed:.1f} px/s | TOO FAST"
+            elif speed == 0.0:
+                box_color = (128, 128, 128)
+                speed_status = "0.0 px/s | IDLE"
             elif speed < MIN_TRACKING_SPEED_PX_S:
                 box_color = (128, 128, 128)
                 speed_status = f"{speed:.1f} px/s | BELOW MIN"
