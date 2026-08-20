@@ -1,19 +1,12 @@
-# Custom BoT-SORT config for the turret: keep IDs stable through brief disappearances.
-# Based on ultralytics' default botsort.yaml, with a larger track buffer + appearance ReID.
-
 tracker_type: botsort
 track_high_thresh: 0.25
 track_low_thresh: 0.1
 new_track_thresh: 0.25
-track_buffer: 150       # keep lost tracks ~5s @30fps (was 30) so a brief vanish keeps the SAME id
+track_buffer: 30
 match_thresh: 0.8
-fuse_score: True
-
-# BoT-SORT specifics
+fuse_score: true
 gmc_method: sparseOptFlow
-
-# ReID: re-match a reappearing person by appearance, not just motion
 proximity_thresh: 0.5
 appearance_thresh: 0.8
-with_reid: True         # was False; re-identifies after occlusion
-model: auto             # "auto" reuses the detector's features (no extra model to download)
+with_reid: true
+model: auto

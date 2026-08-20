@@ -1,0 +1,13 @@
+Import from ultralytics yolov8 
+
+Set frame rate
+
+Set resolution
+
+In main loop:
+    Get camera frame
+    if no camera frame, end loop 
+    Detect object
+    use tlwh function to get top left x, top left y, width, frame_height
+    use tlwh_to_xywh to put it in a xywh format
+    
