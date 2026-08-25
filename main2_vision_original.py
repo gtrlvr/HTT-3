@@ -10,15 +10,19 @@ from ultralytics.utils import ROOT, YAML
 CAMERA_INDEX = 0
 
 # Ignore small frame-to-frame center changes caused by bounding-box jitter.
-IDLE_MOVEMENT_THRESHOLD_PX = 20.0
+IDLE_MOVEMENT_THRESHOLD_PX = 25.0
 
-# Only objects moving within this range can become the active target.
-# Adjust these values after observing the measured speeds for your camera.
-MIN_TRACKING_SPEED_PX_S = 35.0
-MAX_TRACKING_SPEED_PX_S = 1000.0
+# Movement must stay below the threshold this long before the track is idle.
+IDLE_CONFIRMATION_TIME_S = 10.0
+
+# Ignore objects moving faster than this when selecting a target.
+MAX_TRACKING_SPEED_PX_S = 600.0
 
 # Forget old positions after an ID has been missing for this long.
 TRACK_HISTORY_TIMEOUT_S = 1.0
+
+# Re-evaluate which tracked object is fastest at this interval.
+TARGET_SELECTION_INTERVAL_S = 5.0
 
 
 # CAMERA
@@ -61,6 +65,13 @@ YAML.save(tracker_config, botsort_cfg)
 # Last known center and timestamp for each BoT-SORT track ID.
 previous_positions = {}
 
+# Time when each track first dropped below the idle movement threshold.
+idle_start_times = {}
+
+# Active target selection state.
+active_target_id = None
+last_target_selection_time = 0.0
+
 
 try:
     while True:
@@ -85,7 +96,7 @@ try:
             frame,
             tracker=tracker_config,
             persist=True,
-            classes=[0],
+            classes=[67],
 
             verbose=False
         )
@@ -130,10 +141,22 @@ try:
                         dy = cy - previous_cy
                         movement_px = float(np.hypot(dx, dy))
 
-                        if movement_px < IDLE_MOVEMENT_THRESHOLD_PX:
-                            speed = 0.0
-                        else:
+                        if movement_px >= IDLE_MOVEMENT_THRESHOLD_PX:
+                            idle_start_times.pop(track_id, None)
                             speed = movement_px / dt
+                        else:
+                            idle_start_time = idle_start_times.setdefault(
+                                track_id,
+                                frame_time,
+                            )
+
+                            if (
+                                frame_time - idle_start_time
+                                >= IDLE_CONFIRMATION_TIME_S
+                            ):
+                                speed = 0.0
+                            else:
+                                speed = movement_px / dt
 
                 previous_positions[track_id] = (cx, cy, frame_time)
 
@@ -159,25 +182,50 @@ try:
 
         for track_id in stale_track_ids:
             del previous_positions[track_id]
+            idle_start_times.pop(track_id, None)
 
 
 
-        # SELECT FASTEST ELIGIBLE BOUNDING BOX
+        # SELECT THE FASTEST OBJECT THAT IS NOT MOVING TOO FAST
 
         eligible_objects = [
             tracked_object
             for tracked_object in tracked_objects
             if tracked_object["speed"] is not None
-            and MIN_TRACKING_SPEED_PX_S
-            <= tracked_object["speed"]
-            <= MAX_TRACKING_SPEED_PX_S
+            and tracked_object["speed"] <= MAX_TRACKING_SPEED_PX_S
         ]
 
-        target = max(
-            eligible_objects,
-            key=lambda tracked_object: tracked_object["speed"],
-            default=None,
+        current_target = next(
+            (
+                tracked_object
+                for tracked_object in tracked_objects
+                if tracked_object["track_id"] == active_target_id
+                and tracked_object["speed"] is not None
+            ),
+            None,
         )
+
+        if (
+            current_target is not None
+            and frame_time - last_target_selection_time
+            < TARGET_SELECTION_INTERVAL_S
+        ):
+            target = current_target
+        else:
+            # max() naturally falls back to the second-fastest object when the
+            # fastest object was excluded for exceeding the maximum speed.
+            target = max(
+                eligible_objects,
+                key=lambda tracked_object: tracked_object["speed"],
+                default=None,
+            )
+
+            last_target_selection_time = frame_time
+
+            if target is None:
+                active_target_id = None
+            else:
+                active_target_id = target["track_id"]
 
 
 
@@ -204,9 +252,6 @@ try:
             elif speed == 0.0:
                 box_color = (128, 128, 128)
                 speed_status = "0.0 px/s | IDLE"
-            elif speed < MIN_TRACKING_SPEED_PX_S:
-                box_color = (128, 128, 128)
-                speed_status = f"{speed:.1f} px/s | BELOW MIN"
             else:
                 box_color = (0, 255, 0)
                 speed_status = f"{speed:.1f} px/s"
@@ -297,7 +342,7 @@ try:
         else:
             cv2.putText(
                 frame,
-                "No target within velocity limits",
+                "No target at or below maximum speed",
                 (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.65,

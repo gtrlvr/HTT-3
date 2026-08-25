@@ -5,6 +5,7 @@ ultralytics
 filterpy==1.4.5
 scikit-image
 dynamixel-sdk
+pyserial==3.5
 matplotlib
 pandas>=2.2.2
 lap
