@@ -123,6 +123,7 @@ def set_speed_scale(value):
 
 
 def handle_key(key):
+    # Lowercase q exits; uppercase Q is reserved for MOSFET OFF.
     if key == ord("q"):
         return True
     if key == ord("a"):
@@ -137,35 +138,23 @@ def handle_key(key):
         set_speed_scale(SPEED_HIGH)
     elif key == ord("4"):
         set_speed_scale(SPEED_SUPER)
+    elif key in (ord("e"), ord("E")):
+        send_arduino_command("E")
+    elif key == ord("Q"):
+        send_arduino_command("Q")
+    elif key in (ord("f"), ord("F")):
+        send_arduino_command("F")
     return False
 
 
-def arduino_command_listener():
-    """Forward terminal commands to the Arduino without blocking tracking."""
-    print("Arduino controls: E = MOSFET ON, Q = MOSFET OFF, F = fire")
-    print("Type a command and press Enter.")
-
-    while not arduino_stop_event.is_set():
-        try:
-            entry = input().strip()
-        except EOFError:
-            return
-
-        if not entry:
-            continue
-
-        command = entry[0].upper()
-        if command not in {"E", "Q", "F"}:
-            print(f"Unknown Arduino command: {entry!r}. Use E, Q, or F.")
-            continue
-
-        try:
-            arduino_serial.write(command.encode("ascii"))
-            arduino_serial.flush()
-            print(f"Sent {command} to Arduino")
-        except serial.SerialException as exc:
-            print(f"[warn] Arduino write failed: {exc}")
-            return
+def send_arduino_command(command):
+    """Send one command selected from the OpenCV camera window."""
+    try:
+        arduino_serial.write(command.encode("ascii"))
+        arduino_serial.flush()
+        print(f"Sent {command} to Arduino")
+    except serial.SerialException as exc:
+        print(f"[warn] Arduino write failed: {exc}")
 
 
 def arduino_response_listener():
@@ -226,8 +215,8 @@ if not set_dynamixel_position(TILT_MOTOR_ID, INITIAL_TILT_POSITION):
 
 cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)
 
-frame_width = 640
-frame_height = 480
+frame_width = 1280
+frame_height = 720
 
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
@@ -283,15 +272,10 @@ except serial.SerialException as exc:
 time.sleep(2.0)
 
 arduino_stop_event = threading.Event()
-arduino_input_thread = threading.Thread(
-    target=arduino_command_listener,
-    daemon=True,
-)
 arduino_reader_thread = threading.Thread(
     target=arduino_response_listener,
     daemon=True,
 )
-arduino_input_thread.start()
 arduino_reader_thread.start()
 
 
@@ -348,7 +332,7 @@ try:
             frame,
             tracker=tracker_config,
             persist=True,
-            classes=[67],
+            classes=[0],
 
             verbose=False
         )
@@ -648,11 +632,30 @@ try:
 
         
         # DISPLAY
+
+        cv2.putText(
+            frame,
+            f"Motor speed: {SPEED_SCALE:.2f}x | Keys 1-4 change speed",
+            (10, frame_height - 35),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (255, 255, 255),
+            2,
+        )
+        cv2.putText(
+            frame,
+            "E: MOSFET ON | Shift+Q: OFF | F: FIRE | q: quit",
+            (10, frame_height - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (255, 255, 255),
+            2,
+        )
         
         cv2.imshow("Camera Feed", frame)
 
 
-        # Quit and live speed controls: a/d or presets 1-4.
+        # Handle controls while the camera window has keyboard focus.
         if handle_key(cv2.waitKey(1) & 0xFF):
             break
 
@@ -661,7 +664,17 @@ finally:
 
     arduino_stop_event.set()
     if arduino_serial.is_open:
-        arduino_serial.close()
+        try:
+            # Always leave the MOSFET off when the program exits normally or
+            # because of a handled exception.
+            arduino_serial.write(b"Q")
+            arduino_serial.flush()
+            time.sleep(0.1)
+            print("Shutdown: MOSFET OFF command sent to Arduino")
+        except serial.SerialException as exc:
+            print(f"[warn] Could not send MOSFET OFF during shutdown: {exc}")
+        finally:
+            arduino_serial.close()
 
     packet_handler.write1ByteTxRx(
         port_handler,
