@@ -12,11 +12,11 @@ from ultralytics.utils import ROOT, YAML
 
 CAMERA_INDEX = 0
 
-ARDUINO_PORT = "COM5"
+ARDUINO_PORT = "COM4"
 ARDUINO_BAUDRATE = 9600
 
 PROTOCOL_VERSION = 1.0
-DEVICENAME = "COM4"
+DEVICENAME = "COM12"
 BAUDRATE = 57600
 
 PAN_MOTOR_ID = 5
@@ -26,7 +26,7 @@ TILT_MOTOR_ID = 1
 INITIAL_PAN_POSITION = 903
 INITIAL_TILT_POSITION = 3100
 
-ADDR_MX_TORQUE_ENABLE = 24
+ADDR_MX_TORQUE_ENABLE = 24  
 ADDR_MX_GOAL_POSITION = 30
 ADDR_MX_MOVING_SPEED = 32
 ADDR_MX_PRESENT_POSITION = 36
@@ -124,7 +124,7 @@ def set_speed_scale(value):
 
 def handle_key(key):
     # Lowercase q exits; uppercase Q is reserved for MOSFET OFF.
-    if key == ord("q"):
+    if key == ord("x"):
         return True
     if key == ord("a"):
         set_speed_scale(SPEED_SCALE + SPEED_STEP)
@@ -644,7 +644,7 @@ try:
         )
         cv2.putText(
             frame,
-            "E: MOSFET ON | Shift+Q: OFF | F: FIRE | q: quit",
+            "E: MOSFET ON | Shift+Q: OFF | F: FIRE | x: quit",
             (10, frame_height - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.55,
